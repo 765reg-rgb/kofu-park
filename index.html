@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>甲府公園コンシェルジュ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .tab-active { border-bottom: 4px solid #2563eb; color: #2563eb; font-weight: bold; }
+        .park-card:active { background-color: #f3f4f6; }
+        .status-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <header class="sticky top-0 bg-white shadow-md z-20">
+        <div class="p-4 pb-2">
+            <h1 class="text-xl font-extrabold text-blue-700">甲府公園コンシェルジュ</h1>
+            <p class="text-xs text-gray-500">都市公園・チビッコ広場 全39箇所</p>
+        </div>
+        
+        <div class="px-4 pb-3">
+            <input type="text" id="searchInput" placeholder="公園名や住所で検索..." 
+                   class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-base">
+        </div>
+
+        <div class="flex overflow-x-auto gap-6 px-4 pb-2 text-sm no-scrollbar">
+            <button onclick="filterParks('all')" class="whitespace-nowrap pb-2 tab-active" id="tab-all">すべて</button>
+            <button onclick="filterParks('parking')" class="whitespace-nowrap pb-2 text-gray-500" id="tab-parking">🚗 駐車場</button>
+            <button onclick="filterParks('toilet')" class="whitespace-nowrap pb-2 text-gray-500" id="tab-toilet">🚾 トイレ</button>
+            <button onclick="filterParks('playground')" class="whitespace-nowrap pb-2 text-gray-500" id="tab-playground">🛝 遊具</button>
+            <button onclick="filterParks('chibikko')" class="whitespace-nowrap pb-2 text-gray-500" id="tab-chibikko">🧒 チビッコ広場</button>
+        </div>
+    </header>
+
+    <main id="parkList" class="p-4 grid gap-4 pb-24">
+        </main>
+
+    <script>
+        const parks = [
+            { "id": "11-1", "name": "甲府駅北口多目的広場", "parking": 0, "toilet": true, "playground": false, "area": 4443, "fountain": true, "shelter": false, "address": "北口2丁目" },
+            { "id": "11-2", "name": "遊亀公園", "parking": 42, "toilet": true, "playground": true, "area": 28543, "fountain": true, "shelter": true, "address": "太田町" },
+            { "id": "11-3", "name": "玉諸公園", "parking": 25, "toilet": true, "playground": true, "area": 24000, "fountain": true, "shelter": true, "address": "国玉町" },
+            { "id": "11-4", "name": "朝日公園", "parking": 0, "toilet": true, "playground": true, "area": 1959, "fountain": true, "shelter": false, "address": "朝日1丁目" },
+            { "id": "11-5", "name": "橘公園", "parking": 0, "toilet": true, "playground": true, "area": 2043, "fountain": true, "shelter": true, "address": "橘田町" },
+            { "id": "11-6", "name": "西青沼公園", "parking": 0, "toilet": true, "playground": true, "area": 1903, "fountain": true, "shelter": false, "address": "西青沼2丁目" },
+            { "id": "11-7", "name": "二十人町公園", "parking": 0, "toilet": true, "playground": true, "area": 1269, "fountain": true, "shelter": false, "address": "宝1丁目" },
+            { "id": "11-8", "name": "南西土地区画整理1号公園", "parking": 5, "toilet": true, "playground": true, "area": 3000, "fountain": true, "shelter": true, "address": "上石田4丁目" },
+            { "id": "11-9", "name": "南西土地区画整理2号公園", "parking": 0, "toilet": true, "playground": true, "area": 3000, "fountain": true, "shelter": true, "address": "徳行1丁目" },
+            { "id": "11-10", "name": "南西土地区画整理3号公園", "parking": 0, "toilet": true, "playground": true, "area": 3001, "fountain": true, "shelter": true, "address": "国母3丁目" },
+            { "id": "11-11", "name": "南西土地区画整理4号公園", "parking": 0, "toilet": true, "playground": true, "area": 2501, "fountain": true, "shelter": true, "address": "国母1丁目" },
+            { "id": "11-12", "name": "池田公園", "parking": 0, "toilet": true, "playground": true, "area": 2490, "fountain": true, "shelter": true, "address": "長松寺町" },
+            { "id": "11-13", "name": "朝気ふれあい公園", "parking": 0, "toilet": true, "playground": true, "area": 1629, "fountain": true, "shelter": false, "address": "朝気1丁目" },
+            { "id": "11-14", "name": "徳行公園", "parking": 0, "toilet": true, "playground": true, "area": 2500, "fountain": true, "shelter": true, "address": "徳行4丁目" },
+            { "id": "11-15", "name": "大津公園", "parking": 0, "toilet": true, "playground": true, "area": 2499, "fountain": true, "shelter": true, "address": "大津町" },
+            { "id": "11-16", "name": "堀之内北公園", "parking": 0, "toilet": true, "playground": true, "area": 1300, "fountain": true, "shelter": false, "address": "堀之内町" },
+            { "id": "11-17", "name": "堀之内南公園", "parking": 0, "toilet": true, "playground": true, "area": 1300, "fountain": true, "shelter": false, "address": "堀之内町" },
+            { "id": "11-18", "name": "水宮公園", "parking": 0, "toilet": true, "playground": true, "area": 1561, "fountain": true, "shelter": false, "address": "下飯田2丁目" },
+            { "id": "11-19", "name": "古府中町1号公園", "parking": 0, "toilet": false, "playground": true, "area": 662, "fountain": true, "shelter": false, "address": "古府中町" },
+            { "id": "11-20", "name": "古府中町2号公園", "parking": 0, "toilet": false, "playground": true, "area": 349, "fountain": false, "shelter": false, "address": "古府中町" },
+            { "id": "11-21", "name": "住吉区画整理2号公園", "parking": 0, "toilet": true, "playground": true, "area": 1150, "fountain": true, "shelter": true, "address": "住吉4丁目" },
+            { "id": "11-22", "name": "住吉区画整理3号公園", "parking": 0, "toilet": true, "playground": true, "area": 1000, "fountain": true, "shelter": true, "address": "住吉3丁目" },
+            { "id": "11-23", "name": "住吉区画整理4号公園", "parking": 0, "toilet": true, "playground": true, "area": 1000, "fountain": true, "shelter": true, "address": "住吉1丁目" },
+            { "id": "11-24", "name": "国母南公園", "parking": 0, "toilet": true, "playground": true, "area": 1300, "fountain": true, "shelter": false, "address": "国母8丁目" },
+            { "id": "11-25", "name": "千塚公園", "parking": 0, "toilet": true, "playground": true, "area": 2500, "fountain": true, "shelter": true, "address": "千塚4丁目" },
+            { "id": "11-26", "name": "さくら公園", "parking": 0, "toilet": true, "playground": true, "area": 2499, "fountain": true, "shelter": true, "address": "大津町" },
+            { "id": "11-27", "name": "窪中島公園", "parking": 0, "toilet": true, "playground": true, "area": 1500, "fountain": true, "shelter": true, "address": "大津町" },
+            { "id": "11-28", "name": "円満寺公園", "parking": 0, "toilet": true, "playground": true, "area": 1300, "fountain": true, "shelter": true, "address": "大津町" },
+            { "id": "11-29", "name": "しらい公園", "parking": 0, "toilet": true, "playground": true, "area": 1400, "fountain": true, "shelter": true, "address": "白井町" },
+            { "id": "11-30", "name": "甲府市歴史公園", "parking": 0, "toilet": true, "playground": false, "area": 4300, "fountain": true, "shelter": true, "address": "北口2丁目" },
+            { "id": "11-31", "name": "高畑チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 222, "fountain": false, "shelter": false, "address": "高畑1丁目" },
+            { "id": "11-32", "name": "宮前町チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 137, "fountain": false, "shelter": false, "address": "宮前町" },
+            { "id": "11-33", "name": "和戸藤建チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 135, "fountain": false, "shelter": false, "address": "和戸町" },
+            { "id": "11-34", "name": "住吉チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 105, "fountain": false, "shelter": false, "address": "住吉1丁目" },
+            { "id": "11-35", "name": "千塚チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 153, "fountain": false, "shelter": false, "address": "千塚4丁目" },
+            { "id": "11-36", "name": "城東一丁目チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 118, "fountain": false, "shelter": false, "address": "城東1丁目" },
+            { "id": "11-37", "name": "西下条公園", "parking": 0, "toilet": true, "playground": true, "area": 2501, "fountain": true, "shelter": true, "address": "西下条町" },
+            { "id": "11-38", "name": "住吉区画整理1号公園", "parking": 6, "toilet": true, "playground": true, "area": 3000, "fountain": true, "shelter": true, "address": "住吉5丁目" },
+            { "id": "11-39", "name": "和田堀公園", "parking": 0, "toilet": false, "playground": true, "area": 286, "fountain": false, "shelter": false, "address": "住吉1丁目" }
+        ];
+
+        function render(data) {
+            const list = document.getElementById('parkList');
+            list.innerHTML = data.map(p => `
+                <div class="park-card bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col gap-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-blue-500 font-bold text-xs mb-1">NO.${p.id}</p>
+                            <h2 class="text-lg font-bold leading-tight">${p.name}</h2>
+                            <p class="text-sm text-gray-400 mt-1">📍 ${p.address}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="bg-blue-50 text-blue-600 font-bold text-xs px-2 py-1 rounded-lg">${p.area.toLocaleString()}㎡</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 items-center bg-gray-50 p-3 rounded-xl">
+                        <div class="flex flex-col items-center">
+                            <span class="text-xl ${p.parking > 0 ? '' : 'grayscale opacity-30'}">🚗</span>
+                            <span class="text-[10px] font-bold ${p.parking > 0 ? 'text-blue-600' : 'text-gray-300'}">${p.parking}台</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xl ${p.toilet ? '' : 'grayscale opacity-30'}">🚾</span>
+                            <span class="text-[10px] font-bold ${p.toilet ? 'text-green-600' : 'text-gray-300'}">${p.toilet ? 'あり' : 'なし'}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xl ${p.playground ? '' : 'grayscale opacity-30'}">🛝</span>
+                            <span class="text-[10px] font-bold ${p.playground ? 'text-orange-600' : 'text-gray-300'}">${p.playground ? 'あり' : 'なし'}</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-xl ${p.fountain ? '' : 'grayscale opacity-30'}">🚰</span>
+                            <span class="text-[10px] font-bold ${p.fountain ? 'text-cyan-600' : 'text-gray-300'}">${p.fountain ? 'あり' : 'なし'}</span>
+                        </div>
+                    </div>
+
+                    <button onclick="openNav('${p.name}')" class="bg-blue-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-100 active:bg-blue-700 transition-colors">
+                        地図でルート案内
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function filterParks(type) {
+            document.querySelectorAll('header button').forEach(b => b.classList.remove('tab-active', 'text-gray-500'));
+            document.getElementById('tab-' + type).classList.add('tab-active');
+
+            let filtered = parks;
+            if (type === 'parking') filtered = parks.filter(p => p.parking > 0);
+            if (type === 'toilet') filtered = parks.filter(p => p.toilet);
+            if (type === 'playground') filtered = parks.filter(p => p.playground);
+            if (type === 'chibikko') filtered = parks.filter(p => p.name.includes('チビッコ'));
+
+            render(filtered);
+        }
+
+        function openNav(name) {
+            const url = `http://maps.apple.com/?q=${encodeURIComponent('甲府市 ' + name)}`;
+            window.location.href = url;
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            const filtered = parks.filter(p => p.name.includes(val) || p.address.includes(val));
+            render(filtered);
+        });
+
+        // Initial Load
+        render(parks);
+    </script>
+</body>
+</html>
