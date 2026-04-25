@@ -2,145 +2,167 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>甲府公園マップ・コンシェルジュ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>甲府公園マップ・プロ</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: sans-serif; overflow: hidden; }
-        #map { height: 100%; width: 100%; z-index: 1; }
-        .focused-park { border: 3px solid #3b82f6 !important; background-color: #eff6ff !important; transition: all 0.3s; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .filter-checkbox:checked + label { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; }
+        #map { height: 100vh; width: 100vw; }
+        
+        /* リストの引き出しアニメーション */
+        #side-panel {
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+        }
+        
+        /* モバイル：下から、デスクトップ：右から */
+        @media (max-width: 767px) {
+            #side-panel { transform: translateY(calc(100% - 60px)); height: 80vh; bottom: 0; width: 100%; }
+            #side-panel.open { transform: translateY(0); }
+        }
+        @media (min-width: 768px) {
+            #side-panel { transform: translateX(calc(100% - 40px)); width: 400px; right: 0; top: 0; height: 100vh; }
+            #side-panel.open { transform: translateX(0); }
+        }
+
+        .focused-card { border: 2px solid #4285F4; background-color: #F8FBFF; }
+        .filter-chip:checked + label { background-color: #4285F4; color: white; border-color: #4285F4; }
     </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col md:flex-row">
+<body class="bg-gray-100 overflow-hidden">
 
-    <div class="w-full h-1/2 md:h-full md:w-1/2 relative">
-        <div id="map"></div>
-    </div>
+    <div id="map"></div>
 
-    <div class="w-full h-1/2 md:h-full md:w-1/2 flex flex-col bg-white shadow-xl z-10">
+    <div id="side-panel" class="fixed bg-white shadow-2xl flex flex-col border-l border-t border-gray-200 open">
         
-        <div class="p-4 border-b bg-white">
-            <h1 class="text-lg font-bold mb-3 text-blue-700">甲府公園ナビ 2026</h1>
-            
-            <div class="flex flex-wrap gap-2 mb-3">
-                <div class="relative flex-grow">
-                    <input type="text" id="searchInput" placeholder="公園名で検索..." class="w-full p-2 border rounded-lg text-sm">
+        <button onclick="togglePanel()" class="bg-gray-200 h-1 md:h-full md:w-1 flex items-center justify-center py-4 md:py-0">
+            <div class="w-12 h-1.5 bg-gray-400 rounded-full md:hidden"></div>
+            <div class="hidden md:block w-1 h-12 bg-gray-400 rounded-full"></div>
+        </button>
+
+        <div class="flex-grow flex flex-col overflow-hidden">
+            <div class="p-4 border-b">
+                <h1 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <span class="text-blue-600">📍</span> 甲府公園コンシェルジュ
+                </h1>
+                
+                <input type="text" id="searchInput" placeholder="公園名・住所で検索" 
+                       class="w-full p-3 bg-gray-100 rounded-xl mb-4 focus:ring-2 focus:ring-blue-500 outline-none border-none">
+
+                <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                    <input type="checkbox" id="f-parking" class="hidden filter-chip" onchange="updateUI()">
+                    <label for="f-parking" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer">🚗 駐車場</label>
+                    
+                    <input type="checkbox" id="f-toilet" class="hidden filter-chip" onchange="updateUI()">
+                    <label for="f-toilet" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer">🚾 トイレ</label>
+                    
+                    <input type="checkbox" id="f-playground" class="hidden filter-chip" onchange="updateUI()">
+                    <label for="f-playground" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer">🛝 遊具</label>
                 </div>
             </div>
 
-            <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                <input type="checkbox" id="f-parking" class="hidden filter-checkbox" onchange="updateView()">
-                <label for="f-parking" class="px-3 py-1 border rounded-full text-xs font-bold cursor-pointer transition-colors whitespace-nowrap">🚗 駐車場あり</label>
-
-                <input type="checkbox" id="f-toilet" class="hidden filter-checkbox" onchange="updateView()">
-                <label for="f-toilet" class="px-3 py-1 border rounded-full text-xs font-bold cursor-pointer transition-colors whitespace-nowrap">🚾 トイレあり</label>
-
-                <input type="checkbox" id="f-playground" class="hidden filter-checkbox" onchange="updateView()">
-                <label for="f-playground" class="px-3 py-1 border rounded-full text-xs font-bold cursor-pointer transition-colors whitespace-nowrap">🛝 遊具あり</label>
-
-                <input type="checkbox" id="f-fountain" class="hidden filter-checkbox" onchange="updateView()">
-                <label for="f-fountain" class="px-3 py-1 border rounded-full text-xs font-bold cursor-pointer transition-colors whitespace-nowrap">🚰 水飲み場</label>
-            </div>
+            <div id="parkList" class="flex-grow overflow-y-auto p-4 space-y-4">
+                </div>
         </div>
-
-        <div id="parkList" class="flex-grow overflow-y-auto p-4 space-y-3">
-            </div>
     </div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
 
     <script>
         const parks = [
-            { "id": "11-1", "name": "甲府駅北口多目的広場", "parking": 0, "toilet": true, "playground": false, "area": 4443, "fountain": true, "lat": 35.6675, "lng": 138.5694, "address": "北口2丁目" },
-            { "id": "11-2", "name": "遊亀公園", "parking": 42, "toilet": true, "playground": true, "area": 28543, "fountain": true, "lat": 35.6515, "lng": 138.5746, "address": "太田町" },
-            { "id": "11-3", "name": "玉諸公園", "parking": 25, "toilet": true, "playground": true, "area": 24000, "fountain": true, "lat": 35.6552, "lng": 138.6045, "address": "国玉町" },
-            { "id": "11-4", "name": "朝日公園", "parking": 0, "toilet": true, "playground": true, "area": 1959, "fountain": true, "lat": 35.6726, "lng": 138.5691, "address": "朝日1丁目" },
-            { "id": "11-8", "name": "南西土地区画整理1号公園", "parking": 5, "toilet": true, "playground": true, "area": 3000, "fountain": true, "lat": 35.6558, "lng": 138.5532, "address": "上石田4丁目" },
-            { "id": "11-30", "name": "甲府市歴史公園", "parking": 0, "toilet": true, "playground": false, "area": 4300, "fountain": true, "lat": 35.6685, "lng": 138.5714, "address": "北口2丁目" },
-            { "id": "11-38", "name": "住吉区画整理1号公園", "parking": 6, "toilet": true, "playground": true, "area": 3000, "fountain": true, "lat": 35.6375, "lng": 138.5772, "address": "住吉5丁目" },
-            { "id": "11-31", "name": "高畑チビッコ広場", "parking": 0, "toilet": false, "playground": true, "area": 222, "fountain": false, "lat": 35.6508, "lng": 138.5555, "address": "高畑1丁目" }
-            // ※11-1〜11-39の座標情報を追加して運用してください
+            { "id": "11-1", "name": "甲府駅北口多目的広場", "parking": 0, "toilet": true, "playground": false, "lat": 35.6675, "lng": 138.5694, "address": "北口2丁目" },
+            { "id": "11-2", "name": "遊亀公園", "parking": 42, "toilet": true, "playground": true, "lat": 35.6515, "lng": 138.5746, "address": "太田町" },
+            { "id": "11-3", "name": "玉諸公園", "parking": 25, "toilet": true, "playground": true, "lat": 35.6552, "lng": 138.6045, "address": "国玉町" },
+            { "id": "11-4", "name": "朝日公園", "parking": 0, "toilet": true, "playground": true, "lat": 35.6726, "lng": 138.5691, "address": "朝日1丁目" },
+            { "id": "11-8", "name": "南西土地区画整理1号公園", "parking": 5, "toilet": true, "playground": true, "lat": 35.6558, "lng": 138.5532, "address": "上石田4丁目" },
+            { "id": "11-30", "name": "甲府市歴史公園", "parking": 0, "toilet": true, "playground": false, "lat": 35.6685, "lng": 138.5714, "address": "北口2丁目" },
+            { "id": "11-38", "name": "住吉区画整理1号公園", "parking": 6, "toilet": true, "playground": true, "lat": 35.6375, "lng": 138.5772, "address": "住吉5丁目" }
+            // 他のデータも同様の形式で追加
         ];
 
-        // 地図の初期化 (甲府駅中心)
-        const map = L.map('map').setView([35.665, 138.57], 14);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+        let map, markers = [];
 
-        let markers = [];
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 35.665, lng: 138.57 },
+                zoom: 14,
+                disableDefaultUI: true,
+                zoomControl: true,
+                styles: [{ featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5ffec" }] }]
+            });
+            updateUI();
+        }
 
-        function updateView() {
-            const searchText = document.getElementById('searchInput').value.toLowerCase();
-            const condParking = document.getElementById('f-parking').checked;
-            const condToilet = document.getElementById('f-toilet').checked;
-            const condPlayground = document.getElementById('f-playground').checked;
-            const condFountain = document.getElementById('f-fountain').checked;
+        function updateUI() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const pCheck = document.getElementById('f-parking').checked;
+            const tCheck = document.getElementById('f-toilet').checked;
+            const gCheck = document.getElementById('f-playground').checked;
 
-            // フィルタリング
-            const filteredParks = parks.filter(p => {
-                const matchSearch = p.name.includes(searchText) || p.address.includes(searchText);
-                const matchParking = !condParking || p.parking > 0;
-                const matchToilet = !condToilet || p.toilet;
-                const matchPlayground = !condPlayground || p.playground;
-                const matchFountain = !condFountain || p.fountain;
-                return matchSearch && matchParking && matchToilet && matchPlayground && matchFountain;
+            const filtered = parks.filter(p => {
+                return (p.name.includes(search) || p.address.includes(search)) &&
+                       (!pCheck || p.parking > 0) &&
+                       (!tCheck || p.toilet) &&
+                       (!gCheck || p.playground);
             });
 
-            renderList(filteredParks);
-            renderMarkers(filteredParks);
+            renderMarkers(filtered);
+            renderList(filtered);
+        }
+
+        function renderMarkers(data) {
+            markers.forEach(m => m.setMap(null));
+            markers = data.map(p => {
+                const marker = new google.maps.Marker({
+                    position: { lat: p.lat, lng: p.lng },
+                    map: map,
+                    title: p.name,
+                    icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+                });
+                marker.addListener("click", () => {
+                    focusPark(p.id);
+                    openPanel();
+                });
+                return marker;
+            });
         }
 
         function renderList(data) {
-            const list = document.getElementById('parkList');
-            list.innerHTML = data.map(p => `
-                <div id="park-card-${p.id}" class="park-card p-4 border rounded-xl shadow-sm bg-white cursor-pointer" onclick="focusOnMap(${p.lat}, ${p.lng}, '${p.id}')">
-                    <h2 class="font-bold text-gray-800">${p.name}</h2>
-                    <p class="text-xs text-gray-400 mb-2">${p.address} (#${p.id})</p>
-                    <div class="flex gap-2 text-sm">
-                        <span class="${p.parking > 0 ? '' : 'grayscale opacity-30'}">🚗${p.parking}</span>
-                        <span class="${p.toilet ? '' : 'grayscale opacity-30'}">🚾</span>
-                        <span class="${p.playground ? '' : 'grayscale opacity-30'}">🛝</span>
-                        <span class="${p.fountain ? '' : 'grayscale opacity-30'}">🚰</span>
+            const container = document.getElementById('parkList');
+            container.innerHTML = data.map(p => `
+                <div id="card-${p.id}" onclick="moveToPark(${p.lat}, ${p.lng}, '${p.id}')"
+                     class="p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer hover:shadow-md transition-all">
+                    <h3 class="font-bold text-gray-800">${p.name}</h3>
+                    <p class="text-xs text-gray-400 mb-3">${p.address}</p>
+                    <div class="flex gap-4">
+                        <span class="text-sm ${p.parking > 0 ? '' : 'opacity-20'}">🚗 ${p.parking}</span>
+                        <span class="text-sm ${p.toilet ? '' : 'opacity-20'}">🚾</span>
+                        <span class="text-sm ${p.playground ? '' : 'opacity-20'}">🛝</span>
                     </div>
                 </div>
             `).join('');
         }
 
-        function renderMarkers(data) {
-            // 既存のマーカーを削除
-            markers.forEach(m => map.removeLayer(m));
-            markers = [];
-
-            data.forEach(p => {
-                const marker = L.marker([p.lat, p.lng]).addTo(map);
-                marker.on('click', () => focusOnList(p.id));
-                markers.push(marker);
-            });
-        }
-
-        function focusOnList(id) {
-            const element = document.getElementById(`park-card-${id}`);
-            if (element) {
-                // 強調表示
-                document.querySelectorAll('.park-card').forEach(el => el.classList.remove('focused-park'));
-                element.classList.add('focused-park');
-                // スクロール
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        function focusPark(id) {
+            document.querySelectorAll('.focused-card').forEach(c => c.classList.remove('focused-card'));
+            const el = document.getElementById(`card-${id}`);
+            if (el) {
+                el.classList.add('focused-card');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
 
-        function focusOnMap(lat, lng, id) {
-            map.flyTo([lat, lng], 17);
-            focusOnList(id);
+        function moveToPark(lat, lng, id) {
+            map.panTo({ lat, lng });
+            map.setZoom(17);
+            focusPark(id);
+            if(window.innerWidth < 768) togglePanel(); // モバイルなら閉じる
         }
 
-        document.getElementById('searchInput').addEventListener('input', updateView);
+        function togglePanel() { document.getElementById('side-panel').classList.toggle('open'); }
+        function openPanel() { document.getElementById('side-panel').classList.add('open'); }
 
-        // 初期実行
-        updateView();
+        document.getElementById('searchInput').addEventListener('input', updateUI);
     </script>
 </body>
 </html>
