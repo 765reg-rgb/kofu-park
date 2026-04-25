@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>甲府公園ナビ Pro</title>
+    <title>山梨公園ナビ Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -17,6 +17,7 @@
             z-index: 1000;
         }
         
+        /* モバイル: 下から / デスクトップ: 右から */
         @media (max-width: 767px) {
             #side-panel { transform: translateY(calc(100% - 60px)); height: 75vh; bottom: 0; width: 100%; }
             #side-panel.open { transform: translateY(0); }
@@ -44,24 +45,21 @@
         <div class="flex-grow flex flex-col overflow-hidden">
             <div class="p-4 border-b bg-white">
                 <h1 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <span class="text-blue-600 text-2xl">📍</span> 甲府公園ナビ
+                    <span class="text-blue-600 text-2xl">📍</span> 山梨公園ナビ
                 </h1>
                 
-                <input type="text" id="searchInput" placeholder="公園名や住所で検索..." 
+                <input type="text" id="searchInput" placeholder="公園名・市町村・住所で検索..." 
                        class="w-full p-3 bg-gray-100 rounded-xl mb-4 focus:ring-2 focus:ring-blue-400 outline-none border-none transition-all">
 
                 <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                     <input type="checkbox" id="f-p" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-p" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚗 駐車場</label>
+                    <label for="f-p" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚗 駐車場あり</label>
                     
                     <input type="checkbox" id="f-t" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-t" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚾 トイレ</label>
+                    <label for="f-t" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚾 トイレあり</label>
                     
                     <input type="checkbox" id="f-g" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-g" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🛝 遊具</label>
-
-                    <input type="checkbox" id="f-f" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-f" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚰 水飲み</label>
+                    <label for="f-g" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🛝 遊具あり</label>
                 </div>
             </div>
 
@@ -76,31 +74,28 @@
         let map;
         let markerLayer;
 
-        // 1. 外部JSONの読み込み
+        // 1. 外部JSONの取得
         async function loadParksData() {
             try {
+                // GitHub上の parks.json を読み込む
                 const response = await fetch('parks.json');
-                if (!response.ok) throw new Error('JSONの取得に失敗しました');
+                if (!response.ok) throw new Error('データの取得に失敗しました');
                 parks = await response.json();
                 
-                // 座標が未設定のデータに暫定値を付与（本来はJSON側で定義）
-                parks = parks.map((p, index) => ({
-                    ...p,
-                    lat: p.lat || (35.665 + (Math.random() - 0.5) * 0.04),
-                    lng: p.lng || (138.57 + (Math.random() - 0.5) * 0.04)
-                }));
-
                 initApp();
             } catch (error) {
-                document.getElementById('parkList').innerHTML = `<p class="text-red-500 p-4">エラー: ${error.message}</p>`;
+                document.getElementById('parkList').innerHTML = `<p class="text-red-500 p-4 font-bold">Error: JSONが見つかりません。parks.jsonを同じフォルダに配置してください。</p>`;
+                console.error(error);
             }
         }
 
-        // 2. アプリの初期化
+        // 2. マップとイベントの初期化
         function initApp() {
-            map = L.map('map', { zoomControl: false }).setView([35.665, 138.57], 14);
+            // 甲府市を中心に初期表示
+            map = L.map('map', { zoomControl: false }).setView([35.665, 138.57], 11);
+            
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap'
+                attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             
             markerLayer = L.layerGroup().addTo(map);
@@ -109,68 +104,77 @@
             updateUI();
         }
 
-        // 3. UIの更新（フィルタリングと描画）
+        // 3. UI更新ロジック (検索・フィルタリング)
         function updateUI() {
-            const search = document.getElementById('searchInput').value.toLowerCase();
+            const query = document.getElementById('searchInput').value.toLowerCase();
             const pf = document.getElementById('f-p').checked;
             const tf = document.getElementById('f-t').checked;
             const gf = document.getElementById('f-g').checked;
-            const ff = document.getElementById('f-f').checked;
 
             const filtered = parks.filter(p => {
-                const matchSearch = p.name.includes(search) || p.address.includes(search);
+                // 検索強化：公園名(name)、住所(address)に加え、市町村名(city)も含める
+                const matchSearch = 
+                    (p.name && p.name.includes(query)) || 
+                    (p.address && p.address.includes(query)) || 
+                    (p.city && p.city.includes(query));
+
                 const matchParking = !pf || p.parking > 0;
                 const matchToilet = !tf || p.toilet;
                 const matchPlayground = !gf || p.playground;
-                const matchFountain = !ff || p.fountain;
-                return matchSearch && matchParking && matchToilet && matchPlayground && matchFountain;
+
+                return matchSearch && matchParking && matchToilet && matchPlayground;
             });
 
             renderMarkers(filtered);
             renderList(filtered);
         }
 
+        // 4. 地図上のマーカー描画
         function renderMarkers(data) {
             markerLayer.clearLayers();
             data.forEach(p => {
-                const marker = L.marker([p.lat, p.lng]).addTo(markerLayer);
-                marker.on('click', () => {
-                    focusPark(p.id);
-                    openPanel();
-                });
+                if (p.lat && p.lng) {
+                    const marker = L.marker([p.lat, p.lng]).addTo(markerLayer);
+                    marker.on('click', () => {
+                        focusPark(p.id);
+                        openPanel();
+                    });
+                }
             });
         }
 
+        // 5. リスト描画
         function renderList(data) {
             const container = document.getElementById('parkList');
             if (data.length === 0) {
-                container.innerHTML = `<p class="text-center text-gray-400 py-10">見つかりませんでした</p>`;
+                container.innerHTML = `<p class="text-center text-gray-400 py-10">条件に合う公園が見つかりません</p>`;
                 return;
             }
+
             container.innerHTML = data.map(p => `
                 <div id="card-${p.id}" onclick="moveMap(${p.lat}, ${p.lng}, '${p.id}')"
-                     class="p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer hover:shadow-md transition-all flex flex-col gap-2">
+                     class="p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer hover:shadow-md transition-all flex flex-col gap-2 shadow-sm">
                     <div class="flex justify-between items-start">
-                        <h3 class="font-bold text-gray-800 text-base">${p.name}</h3>
-                        <span class="text-[10px] text-gray-400 font-mono">#${p.id}</span>
+                        <span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-md font-bold">${p.city || '山梨県'}</span>
+                        <span class="text-[10px] text-gray-300 font-mono">#${p.id}</span>
                     </div>
-                    <p class="text-xs text-gray-500 italic">📍 ${p.address}</p>
+                    <h3 class="font-bold text-gray-800 text-base">${p.name}</h3>
+                    <p class="text-xs text-gray-500 line-clamp-1">${p.remarks || p.address || ''}</p>
                     <div class="flex gap-4 mt-1 border-t pt-2 border-gray-50">
-                        <span class="text-xs ${p.parking > 0 ? 'text-blue-600 font-bold' : 'opacity-20'}">🚗 ${p.parking}台</span>
-                        <span class="text-xs ${p.toilet ? 'text-green-600 font-bold' : 'opacity-20'}">🚾 トイレ</span>
-                        <span class="text-xs ${p.playground ? 'text-orange-600 font-bold' : 'opacity-20'}">🛝 遊具</span>
+                        <span class="text-xs ${p.parking > 0 ? 'text-blue-600 font-bold' : 'text-gray-300'}">🚗 ${p.parking > 0 ? p.parking + '台' : 'なし'}</span>
+                        <span class="text-xs ${p.toilet ? 'text-green-600 font-bold' : 'text-gray-300'}">🚾 トイレ</span>
+                        <span class="text-xs ${p.playground ? 'text-orange-600 font-bold' : 'text-gray-300'}">🛝 遊具</span>
                     </div>
                 </div>
             `).join('');
         }
 
+        // 6. 地図移動と強調
         function moveMap(lat, lng, id) {
-            map.flyTo([lat, lng], 17);
+            if (!lat || !lng) return;
+            map.flyTo([lat, lng], 15, { duration: 1.5 });
             focusPark(id);
-            // モバイルなら移動後に少し閉じて地図を見やすくする
-            if(window.innerWidth < 768) {
-                // setTimeout(() => togglePanel(), 500); 
-            }
+            // スマホなら少しだけ閉じるか、そのまま
         }
 
         function focusPark(id) {
@@ -185,7 +189,7 @@
         function togglePanel() { document.getElementById('side-panel').classList.toggle('open'); }
         function openPanel() { document.getElementById('side-panel').classList.add('open'); }
 
-        // 起動
+        // データ読み込み開始
         loadParksData();
     </script>
 </body>
