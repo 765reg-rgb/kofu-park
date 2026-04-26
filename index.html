@@ -3,21 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>山梨公園ナビ Pro</title>
+    <title>山梨公園ナビ Pro - 距離順表示</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; z-index: 1; }
-        
-        /* ドロワーパネルのアニメーション */
-        #side-panel {
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 1000;
-        }
-        
-        /* モバイル: 下から / デスクトップ: 右から */
+        #side-panel { transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1000; }
         @media (max-width: 767px) {
             #side-panel { transform: translateY(calc(100% - 60px)); height: 75vh; bottom: 0; width: 100%; }
             #side-panel.open { transform: translateY(0); }
@@ -26,7 +19,6 @@
             #side-panel { transform: translateX(calc(100% - 40px)); width: 400px; right: 0; top: 0; height: 100vh; }
             #side-panel.open { transform: translateX(0); }
         }
-
         .focused-card { border: 2px solid #3b82f6; background-color: #f0f9ff; transform: scale(1.02); }
         .filter-chip:checked + label { background-color: #3b82f6; color: white; border-color: #3b82f6; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -37,34 +29,35 @@
     <div id="map"></div>
 
     <div id="side-panel" class="fixed bg-white shadow-2xl flex flex-col border-l border-t border-gray-200 open">
-        
         <div onclick="togglePanel()" class="h-12 flex items-center justify-center cursor-pointer bg-gray-50 border-b shrink-0">
             <div class="w-12 h-1.5 bg-gray-300 rounded-full md:rotate-90"></div>
         </div>
 
         <div class="flex-grow flex flex-col overflow-hidden">
             <div class="p-4 border-b bg-white">
-                <h1 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <h1 class="text-xl font-bold text-gray-800 mb-2 flex items-center gap-2">
                     <span class="text-blue-600 text-2xl">📍</span> 山梨公園ナビ
                 </h1>
+
+                <button onclick="getCurrentLocation()" class="w-full mb-3 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                    現在地から近い順に並び替え
+                </button>
                 
                 <input type="text" id="searchInput" placeholder="公園名・市町村・住所で検索..." 
-                       class="w-full p-3 bg-gray-100 rounded-xl mb-4 focus:ring-2 focus:ring-blue-400 outline-none border-none transition-all">
+                       class="w-full p-3 bg-gray-100 rounded-xl mb-4 focus:ring-2 focus:ring-blue-400 outline-none border-none transition-all text-sm">
 
                 <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                     <input type="checkbox" id="f-p" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-p" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚗 駐車場あり</label>
-                    
+                    <label for="f-p" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚗 駐車場</label>
                     <input type="checkbox" id="f-t" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-t" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚾 トイレあり</label>
-                    
+                    <label for="f-t" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🚾 トイレ</label>
                     <input type="checkbox" id="f-g" class="hidden filter-chip" onchange="updateUI()">
-                    <label for="f-g" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🛝 遊具あり</label>
+                    <label for="f-g" class="px-4 py-1.5 border border-gray-300 rounded-full text-xs font-bold whitespace-nowrap cursor-pointer transition-all">🛝 遊具</label>
                 </div>
             </div>
 
             <div id="parkList" class="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-50">
-                <p class="text-center text-gray-400 py-10">データを読み込み中...</p>
+                <p class="text-center text-gray-400 py-10">読み込み中...</p>
             </div>
         </div>
     </div>
@@ -73,69 +66,90 @@
         let parks = [];
         let map;
         let markerLayer;
+        let userPos = null;
 
-        // 1. 外部JSONの取得
         async function loadParksData() {
             try {
-                // GitHub上の parks.json を読み込む
                 const response = await fetch('parks.json');
-                if (!response.ok) throw new Error('データの取得に失敗しました');
                 parks = await response.json();
-                
                 initApp();
             } catch (error) {
-                document.getElementById('parkList').innerHTML = `<p class="text-red-500 p-4 font-bold">Error: JSONが見つかりません。parks.jsonを同じフォルダに配置してください。</p>`;
-                console.error(error);
+                document.getElementById('parkList').innerHTML = `<p class="text-red-500 p-4 font-bold">Error: parks.jsonが見つかりません。</p>`;
             }
         }
 
-        // 2. マップとイベントの初期化
         function initApp() {
-            // 甲府市を中心に初期表示
             map = L.map('map', { zoomControl: false }).setView([35.665, 138.57], 11);
-            
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+                attribution: '&copy; OpenStreetMap'
             }).addTo(map);
-            
             markerLayer = L.layerGroup().addTo(map);
-            
             document.getElementById('searchInput').addEventListener('input', updateUI);
             updateUI();
         }
 
-        // 3. UI更新ロジック (検索・フィルタリング)
+        // 現在地取得
+        function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                alert("お使いのブラウザは位置情報に対応していません");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(position => {
+                userPos = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                };
+                // 地図に現在地を表示
+                L.circle([userPos.lat, userPos.lng], {radius: 100, color: 'red'}).addTo(map);
+                map.flyTo([userPos.lat, userPos.lng], 13);
+                updateUI();
+            }, () => {
+                alert("位置情報の取得に失敗しました");
+            });
+        }
+
+        // 2点間の距離計算 (km)
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
         function updateUI() {
             const query = document.getElementById('searchInput').value.toLowerCase();
             const pf = document.getElementById('f-p').checked;
             const tf = document.getElementById('f-t').checked;
             const gf = document.getElementById('f-g').checked;
 
-            const filtered = parks.filter(p => {
-                // 検索強化：公園名(name)、住所(address)に加え、市町村名(city)も含める
-                const matchSearch = 
-                    (p.name && p.name.includes(query)) || 
-                    (p.address && p.address.includes(query)) || 
-                    (p.city && p.city.includes(query));
-
+            let filtered = parks.filter(p => {
+                const matchSearch = (p.name?.includes(query)) || (p.address?.includes(query)) || (p.city?.includes(query));
                 const matchParking = !pf || p.parking > 0;
                 const matchToilet = !tf || p.toilet;
                 const matchPlayground = !gf || p.playground;
-
                 return matchSearch && matchParking && matchToilet && matchPlayground;
             });
+
+            // 距離計算とソート
+            if (userPos) {
+                filtered.forEach(p => {
+                    p.dist = getDistance(userPos.lat, userPos.lng, p.lat, p.lng);
+                });
+                filtered.sort((a, b) => a.dist - b.dist);
+            }
 
             renderMarkers(filtered);
             renderList(filtered);
         }
 
-        // 4. 地図上のマーカー描画
         function renderMarkers(data) {
             markerLayer.clearLayers();
             data.forEach(p => {
                 if (p.lat && p.lng) {
-                    const marker = L.marker([p.lat, p.lng]).addTo(markerLayer);
-                    marker.on('click', () => {
+                    L.marker([p.lat, p.lng]).addTo(markerLayer).on('click', () => {
                         focusPark(p.id);
                         openPanel();
                     });
@@ -143,20 +157,14 @@
             });
         }
 
-        // 5. リスト描画
         function renderList(data) {
             const container = document.getElementById('parkList');
-            if (data.length === 0) {
-                container.innerHTML = `<p class="text-center text-gray-400 py-10">条件に合う公園が見つかりません</p>`;
-                return;
-            }
-
             container.innerHTML = data.map(p => `
                 <div id="card-${p.id}" onclick="moveMap(${p.lat}, ${p.lng}, '${p.id}')"
                      class="p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer hover:shadow-md transition-all flex flex-col gap-2 shadow-sm">
                     <div class="flex justify-between items-start">
                         <span class="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-md font-bold">${p.city || '山梨県'}</span>
-                        <span class="text-[10px] text-gray-300 font-mono">#${p.id}</span>
+                        ${p.dist ? `<span class="text-xs font-bold text-blue-600">📍 約${p.dist.toFixed(1)}km</span>` : ''}
                     </div>
                     <h3 class="font-bold text-gray-800 text-base">${p.name}</h3>
                     <p class="text-xs text-gray-500 line-clamp-1">${p.remarks || p.address || ''}</p>
@@ -169,27 +177,21 @@
             `).join('');
         }
 
-        // 6. 地図移動と強調
         function moveMap(lat, lng, id) {
             if (!lat || !lng) return;
-            map.flyTo([lat, lng], 15, { duration: 1.5 });
+            map.flyTo([lat, lng], 15);
             focusPark(id);
-            // スマホなら少しだけ閉じるか、そのまま
         }
 
         function focusPark(id) {
             document.querySelectorAll('.focused-card').forEach(c => c.classList.remove('focused-card'));
             const el = document.getElementById(`card-${id}`);
-            if (el) {
-                el.classList.add('focused-card');
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            if (el) { el.classList.add('focused-card'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
         }
 
         function togglePanel() { document.getElementById('side-panel').classList.toggle('open'); }
         function openPanel() { document.getElementById('side-panel').classList.add('open'); }
 
-        // データ読み込み開始
         loadParksData();
     </script>
 </body>
